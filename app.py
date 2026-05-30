@@ -257,6 +257,11 @@ def admin_pw():
         return "admin"
 
 
+import re
+def is_valid_email(email):
+    return bool(re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email))
+
+
 def send_email(to_email, subject, html_body):
     """透過 Gmail SMTP 寄信，失敗時靜默（不影響訂單流程）"""
     try:
@@ -405,6 +410,9 @@ def page_buy():
             if not name.strip() or not phone.strip() or not email.strip():
                 st.error("請填寫所有必填欄位（姓名、電話、Email）")
                 return
+            if not is_valid_email(email.strip()):
+                st.error("Email 格式不正確，請輸入有效的 Email 地址")
+                return
             if free_count(load_orders()) + qty > cap:
                 st.error("名額不足，請減少人數")
                 return
@@ -492,6 +500,9 @@ def page_buy():
     if ok:
         if not name.strip() or not phone.strip() or not email.strip() or not bank_code.strip():
             st.error("請填寫所有必填欄位（姓名、電話、Email、後五碼）")
+            return
+        if not is_valid_email(email.strip()):
+            st.error("Email 格式不正確，請輸入有效的 Email 地址")
             return
         if len(bank_code) != 5 or not bank_code.isdigit():
             st.error("後五碼請填寫 5 位數字")
