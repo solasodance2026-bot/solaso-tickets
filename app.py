@@ -365,7 +365,10 @@ def page_buy():
     map_html = render_seat_map(taken, sel, active_tier=tier)
     clicked = click_detector(map_html, key="seatmap")
 
-    if clicked:
+    # 防止無限 rerun：只在偵測到「新的」點擊時才處理
+    last_click = st.session_state.get("_last_click", "")
+    if clicked and clicked != last_click:
+        st.session_state._last_click = clicked
         if clicked in sel:
             sel.discard(clicked)
         elif len(sel) < MAX_PER_ORDER:
