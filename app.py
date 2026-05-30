@@ -3,6 +3,9 @@ import json
 import os
 import random
 import string
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from st_click_detector import click_detector
 
@@ -254,6 +257,95 @@ def admin_pw():
         return "admin"
 
 
+def send_email(to_email, subject, html_body):
+    """透過 Gmail SMTP 寄信，失敗時靜默（不影響訂單流程）"""
+    try:
+        sender = st.secrets["email"]["sender"]
+        password = st.secrets["email"]["password"]
+    except Exception:
+        return  # 未設定 email secrets，跳過
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"{EVENT['name']} <{sender}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.send_message(msg)
+    except Exception:
+        pass  # 寄信失敗不影響訂單
+
+
+def send_order_received(order):
+    """寄送訂單已收到通知"""
+    seats = parse_seats_field(order.get("seats"))
+    seats_text = "、".join(seat_label(s) for s in seats) if seats else "自由座（無指定座位）"
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+      <h2 style="color:#333;">🎫 {EVENT['name']} — 訂單已收到</h2>
+      <p>您好 {order['name']}，</p>
+      <p>我們已收到您的訂單，以下是訂單資訊：</p>
+      <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>訂單編號</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['order_id']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>票種</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['ticket_type']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>座位</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{seats_text}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>張數</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['quantity']} 張</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>金額</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">NT${order['total_amount']:,}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>狀態</b></td>
+            <td style="padding:8px;border:1px solid #ddd;color:#e67e22;"><b>⏳ 待核帳</b></td></tr>
+      </table>
+      <div style="background:#fff3cd;padding:12px;border-radius:6px;margin:16px 0;">
+        <b>⚠️ 請注意：</b>訂單尚未完成！<br>
+        請匯款至 <b>{EVENT['bank_info']}</b>，<br>
+        主辦方核對帳款後，您會收到確認信。
+      </div>
+      <p style="color:#888;font-size:12px;">此為系統自動發送，請勿直接回覆。</p>
+    </div>
+    """
+    send_email(order["email"], f"【{EVENT['name']}】訂單已收到 — {order['order_id']}", html)
+
+
+def send_order_confirmed(order):
+    """寄送付款已確認通知"""
+    seats = parse_seats_field(order.get("seats"))
+    seats_text = "、".join(seat_label(s) for s in seats) if seats else "自由座（無指定座位）"
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+      <h2 style="color:#333;">✅ {EVENT['name']} — 付款已確認</h2>
+      <p>您好 {order['name']}，</p>
+      <p>您的訂單已確認付款完成！</p>
+      <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>訂單編號</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['order_id']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>票種</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['ticket_type']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>座位</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{seats_text}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>張數</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['quantity']} 張</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>狀態</b></td>
+            <td style="padding:8px;border:1px solid #ddd;color:#27ae60;"><b>✅ 已確認</b></td></tr>
+      </table>
+      <div style="background:#d4edda;padding:12px;border-radius:6px;margin:16px 0;">
+        🎉 感謝您的購票！期待在演出當天見到您。
+      </div>
+      <p style="color:#888;font-size:12px;">此為系統自動發送，請勿直接回覆。</p>
+    </div>
+    """
+    send_email(order["email"], f"【{EVENT['name']}】付款已確認 — {order['order_id']}", html)
+
+
 # ════════════════════════════════════════════════
 #  頁面：購票
 # ════════════════════════════════════════════════
@@ -330,6 +422,9 @@ def page_buy():
                 "status": "已確認",
                 "seats": None,
             })
+            send_order_confirmed({"order_id": oid, "name": name.strip(),
+                "email": email.strip(), "ticket_type": "自由座",
+                "quantity": qty, "total_amount": 0, "seats": None})
             st.session_state["order_ok"] = oid
             st.session_state["order_free"] = True
             st.rerun()
@@ -413,18 +508,20 @@ def page_buy():
         while oid in existing:
             oid = gen_order_id()
 
-        insert_order({
+        order_data = {
             "order_id": oid,
             "name": name.strip(),
             "phone": phone.strip(),
-            "email": email.strip() or None,
+            "email": email.strip(),
             "ticket_type": tier,
             "quantity": qty,
             "total_amount": total,
             "bank_last_five": bank_code,
             "status": "待核帳",
             "seats": json.dumps(sorted(sel)),
-        })
+        }
+        insert_order(order_data)
+        send_order_received(order_data)
         st.session_state.selected_seats = set()
         st.session_state["order_ok"] = oid
         st.rerun()
@@ -515,6 +612,8 @@ def page_admin():
                 a1, a2, _ = st.columns([1, 1, 3])
                 if a1.button("✅ 確認收款", key=f"ok_{o['order_id']}"):
                     update_status(o["order_id"], "已確認")
+                    if o.get("email"):
+                        send_order_confirmed(o)
                     st.rerun()
                 if a2.button("❌ 取消", key=f"no_{o['order_id']}"):
                     update_status(o["order_id"], "已取消")
