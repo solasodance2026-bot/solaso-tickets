@@ -262,6 +262,11 @@ def is_valid_email(email):
     return bool(re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email))
 
 
+def is_valid_phone(phone):
+    digits = phone.replace("-", "").replace(" ", "")
+    return bool(re.match(r'^09\d{8}$', digits))
+
+
 def send_email(to_email, subject, html_body):
     """透過 Gmail SMTP 寄信，失敗時靜默（不影響訂單流程）"""
     try:
@@ -422,6 +427,9 @@ def page_buy():
             if not name.strip() or not phone.strip() or not email.strip():
                 st.error("請填寫所有必填欄位（姓名、電話、Email）")
                 return
+            if not is_valid_phone(phone.strip()):
+                st.error("電話格式不正確，請輸入 09 開頭的 10 碼手機號碼")
+                return
             if not is_valid_email(email.strip()):
                 st.error("Email 格式不正確，請輸入有效的 Email 地址")
                 return
@@ -512,6 +520,9 @@ def page_buy():
     if ok:
         if not name.strip() or not phone.strip() or not email.strip() or not bank_code.strip():
             st.error("請填寫所有必填欄位（姓名、電話、Email、後五碼）")
+            return
+        if not is_valid_phone(phone.strip()):
+            st.error("電話格式不正確，請輸入 09 開頭的 10 碼手機號碼")
             return
         if not is_valid_email(email.strip()):
             st.error("Email 格式不正確，請輸入有效的 Email 地址")
