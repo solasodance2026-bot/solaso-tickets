@@ -305,13 +305,13 @@ def page_buy():
             c1, c2 = st.columns(2)
             name = c1.text_input("姓名 *")
             phone = c2.text_input("聯絡電話 *")
-            email = st.text_input("Email（選填）")
+            email = st.text_input("Email *")
             qty = st.number_input("人數", 1, min(MAX_PER_ORDER, remain), 1)
             ok = st.form_submit_button("免費預約", use_container_width=True)
 
         if ok:
-            if not name.strip() or not phone.strip():
-                st.error("請填寫姓名和電話")
+            if not name.strip() or not phone.strip() or not email.strip():
+                st.error("請填寫所有必填欄位（姓名、電話、Email）")
                 return
             if free_count(load_orders()) + qty > cap:
                 st.error("名額不足，請減少人數")
@@ -390,13 +390,13 @@ def page_buy():
         c1, c2 = st.columns(2)
         name = c1.text_input("姓名 *")
         phone = c2.text_input("聯絡電話 *")
-        email = st.text_input("Email（選填）")
+        email = st.text_input("Email *")
         bank_code = st.text_input("匯款帳號後五碼 *（匯款後再填寫）", max_chars=5)
         ok = st.form_submit_button("送出訂單", use_container_width=True)
 
     if ok:
-        if not name.strip() or not phone.strip() or not bank_code.strip():
-            st.error("請填寫所有必填欄位（姓名、電話、後五碼）")
+        if not name.strip() or not phone.strip() or not email.strip() or not bank_code.strip():
+            st.error("請填寫所有必填欄位（姓名、電話、Email、後五碼）")
             return
         if len(bank_code) != 5 or not bank_code.isdigit():
             st.error("後五碼請填寫 5 位數字")
