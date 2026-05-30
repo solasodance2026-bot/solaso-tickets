@@ -298,6 +298,12 @@ def send_order_received(order):
       <table style="border-collapse:collapse;width:100%;margin:16px 0;">
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>訂單編號</b></td>
             <td style="padding:8px;border:1px solid #ddd;">{order['order_id']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>姓名</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['name']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>電話</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['phone']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>Email</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['email']}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>票種</b></td>
             <td style="padding:8px;border:1px solid #ddd;">{order['ticket_type']}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>座位</b></td>
@@ -333,6 +339,12 @@ def send_order_confirmed(order):
       <table style="border-collapse:collapse;width:100%;margin:16px 0;">
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>訂單編號</b></td>
             <td style="padding:8px;border:1px solid #ddd;">{order['order_id']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>姓名</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order['name']}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>電話</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order.get('phone', '—')}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>Email</b></td>
+            <td style="padding:8px;border:1px solid #ddd;">{order.get('email', '—')}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>票種</b></td>
             <td style="padding:8px;border:1px solid #ddd;">{order['ticket_type']}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd;background:#f9f9f9;"><b>座位</b></td>
