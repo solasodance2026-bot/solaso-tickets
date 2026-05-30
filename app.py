@@ -259,8 +259,12 @@ def admin_pw():
 # ════════════════════════════════════════════════
 
 def page_buy():
-    st.title(f"🎫 {EVENT['name']}售票")
-    st.markdown(f"📅 {EVENT['date']}　｜　📍 {EVENT['venue']}")
+    col_logo, col_title = st.columns([1, 3])
+    with col_logo:
+        st.image("logo.jpg", width=120)
+    with col_title:
+        st.title(f"{EVENT['name']}售票")
+        st.caption(f"📅 {EVENT['date']}　｜　📍 {EVENT['venue']}")
     st.divider()
 
     if "order_ok" in st.session_state:
