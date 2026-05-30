@@ -343,9 +343,25 @@ def page_buy():
         st.session_state.selected_seats = set()
 
     sel = st.session_state.get("selected_seats", set())
+    qty = len(sel)
+    price = ti["price"]
+    total = price * qty
 
-    st.caption(f"點擊座位圖選擇 {tier} 座位（最多 {MAX_PER_ORDER} 個），再點一次可取消")
+    # 選位摘要（座位圖上方，隨時可見）
+    if qty > 0:
+        st.success(
+            f"✅ 已選 {qty} 個座位 — NT${total:,}　｜　"
+            + "、".join(seat_label(s) for s in sorted(sel))
+        )
+        col_clear, col_hint = st.columns([1, 2])
+        if col_clear.button("🗑️ 清除選擇"):
+            st.session_state.selected_seats = set()
+            st.rerun()
+        col_hint.caption("⬇️ 往下捲動填寫資料完成購票")
+    else:
+        st.info(f"點擊座位圖選擇 {tier} 座位（最多 {MAX_PER_ORDER} 個），再點一次可取消")
 
+    # 座位圖
     map_html = render_seat_map(taken, sel, active_tier=tier)
     clicked = click_detector(map_html, key="seatmap")
 
@@ -359,22 +375,12 @@ def page_buy():
         st.session_state.selected_seats = sel
         st.rerun()
 
-    qty = len(sel)
-
     if qty == 0:
-        st.info("請點擊上方座位圖選擇座位")
         return
 
-    price = ti["price"]
-    total = price * qty
-
-    st.markdown(f"### 已選 {qty} 個座位　｜　應付金額：NT${total:,}")
-    st.caption("　".join(seat_label(s) for s in sorted(sel)))
-
-    if st.button("🗑️ 清除全部選擇"):
-        st.session_state.selected_seats = set()
-        st.rerun()
-
+    # 結帳區
+    st.divider()
+    st.markdown(f"### 🧾 已選 {qty} 個座位　｜　應付金額：NT${total:,}")
     st.info(f"請匯款至：**{EVENT['bank_info']}**")
 
     with st.form("paid_form"):
