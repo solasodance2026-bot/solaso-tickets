@@ -4,6 +4,7 @@ import os
 import random
 import string
 from datetime import datetime
+from st_click_detector import click_detector
 
 st.set_page_config(page_title="Solaso 售票系統", page_icon="🎫", layout="centered")
 
@@ -39,29 +40,29 @@ MAX_PER_ORDER = 10
 #  座位工具
 # ════════════════════════════════════════════════
 
-def tier_for_row(row: int) -> str:
+def tier_for_row(row):
     for name, t in TIERS.items():
         if t["rows"][0] <= row <= t["rows"][1]:
             return name
     return ""
 
 
-def make_sid(row: int, sec_code: str, num: int) -> str:
+def make_sid(row, sec_code, num):
     return f"{row}-{sec_code}-{num}"
 
 
-def parse_sid(sid: str):
+def parse_sid(sid):
     r, s, n = sid.split("-")
     return int(r), s, int(n)
 
 
-def seat_label(sid: str) -> str:
+def seat_label(sid):
     row, sec, num = parse_sid(sid)
     sec_names = {"L": "左", "C": "中", "R": "右"}
     return f"第{row}排 {sec_names[sec]}區 第{num}座"
 
 
-def taken_seats(orders: list) -> set:
+def taken_seats(orders):
     out = set()
     for o in orders:
         if o["status"] != "已取消" and o.get("seats"):
@@ -71,32 +72,47 @@ def taken_seats(orders: list) -> set:
     return out
 
 
-def free_count(orders: list) -> int:
+def free_count(orders):
     return sum(
         o["quantity"] for o in orders
         if o["status"] != "已取消" and o.get("ticket_type") == "自由座"
     )
 
 
-def free_capacity() -> int:
+def free_capacity():
     r = TIERS["自由座"]["rows"]
     return (r[1] - r[0] + 1) * sum(s["seats"] for s in SECTIONS.values())
+
+
+def parse_seats_field(raw):
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        return json.loads(raw)
+    return raw
 
 
 # ════════════════════════════════════════════════
 #  座位圖 HTML
 # ════════════════════════════════════════════════
 
-def render_seat_map(taken: set, selected=None) -> str:
+def render_seat_map(taken, selected=None, active_tier=None):
+    """
+    active_tier=None → 全部顯示（唯讀，給後台用）
+    active_tier="VVIP" → 該票種可點擊，其餘淡化
+    """
     sel = selected or set()
 
     html = """<style>
-.smap{text-align:center;font-family:sans-serif}
+.smap{text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;user-select:none}
 .stage{background:#333;color:#fff;padding:8px;margin-bottom:10px;border-radius:5px;font-size:14px}
 .srow{display:flex;align-items:center;justify-content:center;margin:1px 0}
 .rlbl{width:28px;text-align:right;margin-right:3px;font-size:10px;color:#888}
-.s{width:20px;height:20px;margin:1px;border-radius:3px;display:inline-block}
+.s{width:22px;height:22px;margin:1px;border-radius:3px;display:inline-block;box-sizing:border-box}
+a.s{text-decoration:none;cursor:pointer;transition:transform 0.1s}
+a.s:hover{transform:scale(1.2);opacity:0.85}
 .gap{width:10px;display:inline-block}
+.dim{opacity:0.2}
 .tl{font-size:10px;color:#aaa;margin:5px 0 1px}
 .lgd{margin-top:10px;font-size:11px}
 .li{display:inline-block;padding:2px 8px;border-radius:3px;margin:2px}
@@ -105,18 +121,20 @@ def render_seat_map(taken: set, selected=None) -> str:
 <div class="smap">
 <div class="stage">🎭 舞台</div>
 <div class="sec-hdr">
-  <span style="width:28px"></span>
-  <span style="width:110px;text-align:center">左區</span>
-  <span style="width:10px"></span>
-  <span style="width:220px;text-align:center">中區</span>
-  <span style="width:10px"></span>
-  <span style="width:110px;text-align:center">右區</span>
+<span style="width:28px"></span>
+<span style="width:120px;text-align:center">左區</span>
+<span style="width:10px"></span>
+<span style="width:240px;text-align:center">中區</span>
+<span style="width:10px"></span>
+<span style="width:120px;text-align:center">右區</span>
 </div>
 """
+
     cur_tier = ""
     for row in range(1, TOTAL_ROWS + 1):
         tier = tier_for_row(row)
         ti = TIERS[tier]
+        is_active = (active_tier is None or tier == active_tier)
 
         if tier != cur_tier:
             price_txt = f"NT${ti['price']:,}" if ti["price"] else "免費"
@@ -130,26 +148,33 @@ def render_seat_map(taken: set, selected=None) -> str:
             for n in range(1, sinfo["seats"] + 1):
                 sid = make_sid(row, code, n)
                 title = seat_label(sid)
+
                 if sid in taken:
-                    c = "#d5d5d5"
+                    dim = "" if is_active else " dim"
+                    html += f'<span class="s{dim}" style="background:#d5d5d5;" title="已售"></span>'
                 elif sid in sel:
-                    c = "#E74C3C"
+                    html += f'<a href="#" id="{sid}" class="s" style="background:#E74C3C;" title="{title} ✓"></a>'
+                elif is_active and active_tier is not None:
+                    html += f'<a href="#" id="{sid}" class="s" style="background:{ti["color"]};" title="{title}"></a>'
+                elif active_tier is None:
+                    html += f'<span class="s" style="background:{ti["color"]};" title="{title}"></span>'
                 else:
-                    c = ti["color"]
-                html += f'<div class="s" style="background:{c}" title="{title}"></div>'
+                    html += f'<span class="s dim" style="background:{ti["color"]};"></span>'
+
             if code != "R":
                 html += '<div class="gap"></div>'
 
         html += "</div>"
 
-    html += """<div class="lgd">
-<span class="li" style="background:#FFD700">VVIP</span>
-<span class="li" style="background:#9B59B6;color:#fff">VIP</span>
-<span class="li" style="background:#3498DB;color:#fff">一般</span>
-<span class="li" style="background:#2ECC71;color:#fff">自由座</span>
-<span class="li" style="background:#d5d5d5">已售</span>
-<span class="li" style="background:#E74C3C;color:#fff">已選</span>
-</div></div>"""
+    html += '<div class="lgd">'
+    html += '<span class="li" style="background:#FFD700">VVIP</span>'
+    html += '<span class="li" style="background:#9B59B6;color:#fff">VIP</span>'
+    html += '<span class="li" style="background:#3498DB;color:#fff">一般</span>'
+    html += '<span class="li" style="background:#2ECC71;color:#fff">自由座</span>'
+    html += '<span class="li" style="background:#d5d5d5">已售</span>'
+    if active_tier is not None:
+        html += '<span class="li" style="background:#E74C3C;color:#fff">已選</span>'
+    html += "</div></div>"
     return html
 
 
@@ -157,7 +182,7 @@ def render_seat_map(taken: set, selected=None) -> str:
 #  儲存層
 # ════════════════════════════════════════════════
 
-def _use_supabase() -> bool:
+def _use_supabase():
     try:
         return bool(st.secrets.get("supabase", {}).get("url"))
     except Exception:
@@ -174,13 +199,13 @@ if _use_supabase():
             st.secrets["supabase"]["key"],
         )
 
-    def load_orders() -> list:
+    def load_orders():
         return _db().table("orders").select("*").order("created_at", desc=True).execute().data
 
-    def insert_order(data: dict):
+    def insert_order(data):
         _db().table("orders").insert(data).execute()
 
-    def update_status(order_id: str, new_status: str):
+    def update_status(order_id, new_status):
         _db().table("orders").update({"status": new_status}).eq("order_id", order_id).execute()
 
 else:
@@ -196,16 +221,16 @@ else:
         with open(_LOCAL, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    def load_orders() -> list:
+    def load_orders():
         return _read()
 
-    def insert_order(data: dict):
+    def insert_order(data):
         orders = _read()
         data["created_at"] = datetime.now().isoformat()
         orders.insert(0, data)
         _write(orders)
 
-    def update_status(order_id: str, new_status: str):
+    def update_status(order_id, new_status):
         orders = _read()
         for o in orders:
             if o["order_id"] == order_id:
@@ -218,23 +243,15 @@ else:
 #  通用工具
 # ════════════════════════════════════════════════
 
-def gen_order_id() -> str:
+def gen_order_id():
     return "SLS-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
-def admin_pw() -> str:
+def admin_pw():
     try:
         return st.secrets["admin"]["password"]
     except Exception:
         return "admin"
-
-
-def parse_seats_field(raw) -> list:
-    if not raw:
-        return []
-    if isinstance(raw, str):
-        return json.loads(raw)
-    return raw
 
 
 # ════════════════════════════════════════════════
@@ -266,7 +283,6 @@ def page_buy():
         ),
     )
     ti = TIERS[tier]
-    price = ti["price"]
 
     # ── 自由座 ──
     if tier == "自由座":
@@ -275,7 +291,7 @@ def page_buy():
         remain = cap - used
         st.caption(f"自由座剩餘 {remain} / {cap} 個名額")
 
-        st.markdown(render_seat_map(taken), unsafe_allow_html=True)
+        st.markdown(render_seat_map(taken, active_tier="自由座"), unsafe_allow_html=True)
 
         if remain <= 0:
             st.error("自由座已額滿！")
@@ -315,52 +331,46 @@ def page_buy():
             st.rerun()
         return
 
-    # ── 付費座位 ──
-    section = st.selectbox("選擇區域", list(SECTIONS.keys()))
-    sec = SECTIONS[section]
-    sec_code = sec["code"]
+    # ── 付費座位：點擊選位 ──
 
-    row_s, row_e = ti["rows"]
-    available = []
-    for row in range(row_s, row_e + 1):
-        for n in range(1, sec["seats"] + 1):
-            sid = make_sid(row, sec_code, n)
-            if sid not in taken:
-                available.append(sid)
+    # 切換票種時清空選擇
+    if st.session_state.get("_tier") != tier:
+        st.session_state._tier = tier
+        st.session_state.selected_seats = set()
 
-    if not available:
-        st.warning(f"{tier} {section} 已售罄，請選擇其他區域")
-        st.markdown(render_seat_map(taken), unsafe_allow_html=True)
-        return
+    sel = st.session_state.get("selected_seats", set())
 
-    st.caption(f"{tier} {section} 剩餘 {len(available)} 個座位")
+    st.caption(f"點擊座位圖選擇 {tier} 座位（最多 {MAX_PER_ORDER} 個），再點一次可取消")
 
-    label_to_id = {seat_label(sid): sid for sid in available}
+    map_html = render_seat_map(taken, sel, active_tier=tier)
+    clicked = click_detector(map_html, key="seatmap")
 
-    ms_key = f"sel_{tier}_{section}"
-    prev = st.session_state.get(ms_key, [])
-    valid_prev = [v for v in prev if v in label_to_id]
-    if prev != valid_prev:
-        st.session_state[ms_key] = valid_prev
+    if clicked:
+        if clicked in sel:
+            sel.discard(clicked)
+        elif len(sel) < MAX_PER_ORDER:
+            sel.add(clicked)
+        else:
+            st.warning(f"每筆訂單最多選 {MAX_PER_ORDER} 個座位")
+        st.session_state.selected_seats = sel
+        st.rerun()
 
-    selected_labels = st.multiselect(
-        "選擇座位（點擊下拉選單）",
-        options=list(label_to_id.keys()),
-        max_selections=MAX_PER_ORDER,
-        key=ms_key,
-    )
-    selected_ids = {label_to_id[lbl] for lbl in selected_labels}
-
-    st.markdown(render_seat_map(taken, selected_ids), unsafe_allow_html=True)
-
-    qty = len(selected_ids)
-    total = price * qty
+    qty = len(sel)
 
     if qty == 0:
-        st.info("請從上方下拉選單選擇座位")
+        st.info("請點擊上方座位圖選擇座位")
         return
 
+    price = ti["price"]
+    total = price * qty
+
     st.markdown(f"### 已選 {qty} 個座位　｜　應付金額：NT${total:,}")
+    st.caption("　".join(seat_label(s) for s in sorted(sel)))
+
+    if st.button("🗑️ 清除全部選擇"):
+        st.session_state.selected_seats = set()
+        st.rerun()
+
     st.info(f"請匯款至：**{EVENT['bank_info']}**")
 
     with st.form("paid_form"):
@@ -380,7 +390,7 @@ def page_buy():
             return
 
         fresh = load_orders()
-        conflict = selected_ids & taken_seats(fresh)
+        conflict = sel & taken_seats(fresh)
         if conflict:
             st.error(f"座位已被他人購買：{', '.join(seat_label(s) for s in conflict)}，請重新選擇")
             return
@@ -400,8 +410,9 @@ def page_buy():
             "total_amount": total,
             "bank_last_five": bank_code,
             "status": "待核帳",
-            "seats": json.dumps(sorted(selected_ids)),
+            "seats": json.dumps(sorted(sel)),
         })
+        st.session_state.selected_seats = set()
         st.session_state["order_ok"] = oid
         st.rerun()
 
@@ -470,7 +481,6 @@ def page_admin():
 
     st.divider()
 
-    # ── 待核帳 ──
     st.subheader(f"待核帳（{len(pending)} 筆）")
     if pending:
         for o in pending:
@@ -501,7 +511,6 @@ def page_admin():
 
     st.divider()
 
-    # ── 全部訂單 ──
     st.subheader("所有訂單")
     filt = st.selectbox("篩選", ["全部", "待核帳", "已確認", "已取消"])
     show = orders if filt == "全部" else [o for o in orders if o["status"] == filt]
