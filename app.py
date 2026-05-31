@@ -11,6 +11,17 @@ from st_click_detector import click_detector
 
 st.set_page_config(page_title="Solaso 售票系統", page_icon="🎫", layout="centered")
 
+# 隱藏右上角 GitHub 圖示、Fork 按鈕、Streamlit 選單
+st.markdown("""
+<style>
+.stMainMenu, header[data-testid="stHeader"],
+footer, #MainMenu, .viewerBadge_container__r5tak,
+[data-testid="manage-app-button"],
+.styles_viewerBadge__CvC9N, ._profileContainer_gzau3_53,
+[data-testid="stToolbar"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ════════════════════════════════════════════════
 #  設定區 — 修改這裡調整座位配置與票價
 # ════════════════════════════════════════════════
