@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from st_click_detector import click_detector
+import gspread
+from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Solaso 售票系統", page_icon="🎫", layout="centered")
 
@@ -268,6 +270,75 @@ def admin_pw():
         return "admin"
 
 
+# ════════════════════════════════════════════════
+#  Google Sheets 同步
+# ════════════════════════════════════════════════
+
+SHEET_HEADERS = ["訂單編號", "姓名", "電話", "Email", "票種", "座位", "張數", "金額", "後五碼", "狀態", "下單時間"]
+
+@st.cache_resource
+def _get_gsheet():
+    """連線到 Google Sheet，回傳 worksheet；未設定時回傳 None"""
+    try:
+        creds_dict = dict(st.secrets["gsheet"])
+        # st.secrets 會把換行轉義，需要還原
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        creds = Credentials.from_service_account_info(
+            creds_dict,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"],
+        )
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key("10fJ51eLqj2v8Bn8gFWBpPAtxVhbPH1Cz7mp5cqR9JnM")
+        ws = sh.sheet1
+        # 確保表頭存在
+        if not ws.row_values(1):
+            ws.append_row(SHEET_HEADERS)
+        return ws
+    except Exception:
+        return None
+
+
+def sync_order_to_sheet(order):
+    """新增一筆訂單到 Google Sheet"""
+    ws = _get_gsheet()
+    if ws is None:
+        return
+    try:
+        seats = parse_seats_field(order.get("seats"))
+        seats_text = "、".join(seat_label(s) for s in seats) if seats else "自由座"
+        row = [
+            order.get("order_id", ""),
+            order.get("name", ""),
+            order.get("phone", ""),
+            order.get("email", ""),
+            order.get("ticket_type", ""),
+            seats_text,
+            order.get("quantity", 0),
+            order.get("total_amount", 0),
+            order.get("bank_last_five", ""),
+            order.get("status", ""),
+            order.get("created_at", datetime.now().isoformat()),
+        ]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+    except Exception:
+        pass
+
+
+def sync_status_to_sheet(order_id, new_status):
+    """更新 Google Sheet 中的訂單狀態"""
+    ws = _get_gsheet()
+    if ws is None:
+        return
+    try:
+        cell = ws.find(order_id, in_column=1)
+        if cell:
+            status_col = SHEET_HEADERS.index("狀態") + 1
+            ws.update_cell(cell.row, status_col, new_status)
+    except Exception:
+        pass
+
+
 import re
 def is_valid_email(email):
     return bool(re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email))
@@ -449,21 +520,21 @@ def page_buy():
                 return
 
             oid = gen_order_id()
-            insert_order({
+            free_order = {
                 "order_id": oid,
                 "name": name.strip(),
                 "phone": phone.strip(),
-                "email": email.strip() or None,
+                "email": email.strip(),
                 "ticket_type": "自由座",
                 "quantity": qty,
                 "total_amount": 0,
                 "bank_last_five": "00000",
                 "status": "已確認",
                 "seats": None,
-            })
-            send_order_confirmed({"order_id": oid, "name": name.strip(),
-                "email": email.strip(), "ticket_type": "自由座",
-                "quantity": qty, "total_amount": 0, "seats": None})
+            }
+            insert_order(free_order)
+            sync_order_to_sheet(free_order)
+            send_order_confirmed(free_order)
             st.session_state["order_ok"] = oid
             st.session_state["order_free"] = True
             st.rerun()
@@ -566,6 +637,7 @@ def page_buy():
             "seats": json.dumps(sorted(sel)),
         }
         insert_order(order_data)
+        sync_order_to_sheet(order_data)
         send_order_received(order_data)
         st.session_state.selected_seats = set()
         st.session_state["order_ok"] = oid
@@ -657,11 +729,13 @@ def page_admin():
                 a1, a2, _ = st.columns([1, 1, 3])
                 if a1.button("✅ 確認收款", key=f"ok_{o['order_id']}"):
                     update_status(o["order_id"], "已確認")
+                    sync_status_to_sheet(o["order_id"], "已確認")
                     if o.get("email"):
                         send_order_confirmed(o)
                     st.rerun()
                 if a2.button("❌ 取消", key=f"no_{o['order_id']}"):
                     update_status(o["order_id"], "已取消")
+                    sync_status_to_sheet(o["order_id"], "已取消")
                     st.rerun()
     else:
         st.info("沒有待核帳訂單")
