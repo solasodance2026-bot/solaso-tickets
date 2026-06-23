@@ -198,6 +198,10 @@ a.s:hover{transform:scale(1.2);opacity:0.85}
 #  儲存層
 # ════════════════════════════════════════════════
 
+class StorageError(Exception):
+    """Raised when the configured order storage cannot be reached."""
+
+
 def _use_supabase():
     try:
         return bool(st.secrets.get("supabase", {}).get("url"))
@@ -216,13 +220,22 @@ if _use_supabase():
         )
 
     def load_orders():
-        return _db().table("orders").select("*").order("created_at", desc=True).execute().data
+        try:
+            return _db().table("orders").select("*").order("created_at", desc=True).execute().data
+        except Exception as exc:
+            raise StorageError("訂單資料庫暫時無法連線，請稍後再試。") from exc
 
     def insert_order(data):
-        _db().table("orders").insert(data).execute()
+        try:
+            _db().table("orders").insert(data).execute()
+        except Exception as exc:
+            raise StorageError("訂單目前無法送出，請稍後再試。") from exc
 
     def update_status(order_id, new_status):
-        _db().table("orders").update({"status": new_status}).eq("order_id", order_id).execute()
+        try:
+            _db().table("orders").update({"status": new_status}).eq("order_id", order_id).execute()
+        except Exception as exc:
+            raise StorageError("訂單狀態目前無法更新，請稍後再試。") from exc
 
 else:
     _LOCAL = os.path.join(os.path.dirname(__file__), "orders.json")
@@ -253,6 +266,31 @@ else:
                 o["status"] = new_status
                 break
         _write(orders)
+
+
+def show_storage_error(error, show_detail=False):
+    st.error(str(error))
+    st.info("系統正在維護或資料庫設定需要更新。若你已完成付款或需要協助，請直接聯絡主辦方。")
+    if show_detail:
+        detail = error.__cause__ or error
+        with st.expander("管理員診斷資訊"):
+            st.code(f"{type(detail).__name__}: {detail}")
+
+
+def load_orders_or_stop(show_detail=False):
+    try:
+        return load_orders()
+    except StorageError as exc:
+        show_storage_error(exc, show_detail)
+        st.stop()
+
+
+def run_storage_action_or_stop(action, show_detail=False):
+    try:
+        action()
+    except StorageError as exc:
+        show_storage_error(exc, show_detail)
+        st.stop()
 
 
 # ════════════════════════════════════════════════
@@ -472,7 +510,7 @@ def page_buy():
             st.info("主辦方將於 1–2 個工作天內核對帳款。")
         st.divider()
 
-    orders = load_orders()
+    orders = load_orders_or_stop()
     taken = taken_seats(orders)
 
     tier = st.selectbox(
@@ -515,7 +553,7 @@ def page_buy():
             if not is_valid_email(email.strip()):
                 st.error("Email 格式不正確，請輸入有效的 Email 地址")
                 return
-            if free_count(load_orders()) + qty > cap:
+            if free_count(load_orders_or_stop()) + qty > cap:
                 st.error("名額不足，請減少人數")
                 return
 
@@ -532,7 +570,7 @@ def page_buy():
                 "status": "已確認",
                 "seats": None,
             }
-            insert_order(free_order)
+            run_storage_action_or_stop(lambda: insert_order(free_order))
             sync_order_to_sheet(free_order)
             send_order_confirmed(free_order)
             st.session_state["order_ok"] = oid
@@ -613,7 +651,7 @@ def page_buy():
             st.error("後五碼請填寫 5 位數字")
             return
 
-        fresh = load_orders()
+        fresh = load_orders_or_stop()
         conflict = sel & taken_seats(fresh)
         if conflict:
             st.error(f"座位已被他人購買：{', '.join(seat_label(s) for s in conflict)}，請重新選擇")
@@ -636,7 +674,7 @@ def page_buy():
             "status": "待核帳",
             "seats": json.dumps(sorted(sel)),
         }
-        insert_order(order_data)
+        run_storage_action_or_stop(lambda: insert_order(order_data))
         sync_order_to_sheet(order_data)
         send_order_received(order_data)
         st.session_state.selected_seats = set()
@@ -656,7 +694,7 @@ def page_query():
     if not oid:
         return
 
-    orders = load_orders()
+    orders = load_orders_or_stop()
     match = [o for o in orders if o["order_id"] == oid]
     if not match:
         st.warning("查無此訂單，請確認編號")
@@ -693,7 +731,7 @@ def page_admin():
         st.error("密碼錯誤")
         return
 
-    orders = load_orders()
+    orders = load_orders_or_stop(show_detail=True)
     confirmed = [o for o in orders if o["status"] == "已確認"]
     pending = [o for o in orders if o["status"] == "待核帳"]
 
@@ -728,13 +766,13 @@ def page_admin():
 
                 a1, a2, _ = st.columns([1, 1, 3])
                 if a1.button("✅ 確認收款", key=f"ok_{o['order_id']}"):
-                    update_status(o["order_id"], "已確認")
+                    run_storage_action_or_stop(lambda: update_status(o["order_id"], "已確認"), show_detail=True)
                     sync_status_to_sheet(o["order_id"], "已確認")
                     if o.get("email"):
                         send_order_confirmed(o)
                     st.rerun()
                 if a2.button("❌ 取消", key=f"no_{o['order_id']}"):
-                    update_status(o["order_id"], "已取消")
+                    run_storage_action_or_stop(lambda: update_status(o["order_id"], "已取消"), show_detail=True)
                     sync_status_to_sheet(o["order_id"], "已取消")
                     st.rerun()
     else:
