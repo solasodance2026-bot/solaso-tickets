@@ -19,7 +19,18 @@ st.markdown("""
 .stMainMenu, header[data-testid="stHeader"],
 footer, #MainMenu, .viewerBadge_container__r5tak,
 [data-testid="manage-app-button"],
+[data-testid="stDecoration"],
+[data-testid="stDeployButton"],
+[data-testid="stStatusWidget"],
+[data-testid="stHeaderActionElements"],
+[data-testid="stToolbarActions"],
+[data-testid="stMainMenu"],
 .styles_viewerBadge__CvC9N, ._profileContainer_gzau3_53,
+[class*="viewerBadge"],
+[class*="ViewerBadge"],
+[class*="manageApp"],
+[class*="ManageApp"],
+[class*="stActionButton"],
 [data-testid="stToolbar"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
