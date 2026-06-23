@@ -32,6 +32,19 @@ footer, #MainMenu, .viewerBadge_container__r5tak,
 [class*="ManageApp"],
 [class*="stActionButton"],
 [data-testid="stToolbar"] { display: none !important; }
+
+/* Streamlit Cloud bottom-right floating controls */
+body > div[style*="position: fixed"][style*="bottom"][style*="right"],
+body > button[style*="position: fixed"][style*="bottom"][style*="right"],
+body > a[style*="position: fixed"][style*="bottom"][style*="right"],
+div[class*="floating"][class*="Button"],
+div[class*="Floating"][class*="Button"],
+div[class*="floating"][class*="button"],
+div[class*="Floating"][class*="button"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
